@@ -4,7 +4,7 @@ Linkly turns long web addresses into short links and tracks visits. It uses Node
 
 ## Set up locally
 
-You need Node.js 20 or newer and a running PostgreSQL server.
+You need Node.js 20.19 or newer and a running PostgreSQL server.
 
 ```sh
 npm install
@@ -27,6 +27,7 @@ Run the tests:
 
 ```sh
 npm test
+npm run lint
 ```
 
 Never point `TEST_DATABASE_URL` at a production database.

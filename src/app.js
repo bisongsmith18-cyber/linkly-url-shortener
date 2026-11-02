@@ -3,6 +3,7 @@ import { Readable } from 'node:stream';
 import express from 'express';
 import swaggerUi from 'swagger-ui-express';
 import { z } from 'zod';
+import { openApiDocument } from './openapi.js';
 
 const codeSchema = z.string().regex(/^[A-Za-z0-9_-]{3,16}$/);
 const createLinkSchema = z.object({
@@ -23,115 +24,7 @@ const cursorSchema = z.object({
   at: z.string().datetime({ offset: true }),
   id: z.number().int().positive(),
 });
-
-export const openApiDocument = {
-  openapi: '3.0.3',
-  info: {
-    title: 'Linkly URL shortener',
-    version: '1.0.0',
-    description: 'Create short links, redirect visitors, and inspect click analytics.',
-  },
-  servers: [{ url: '/' }],
-  paths: {
-    '/health': {
-      get: {
-        summary: 'Check API and database health',
-        responses: {
-          200: { description: 'Healthy' },
-          503: { description: 'Database unavailable' },
-        },
-      },
-    },
-    '/links': {
-      post: {
-        summary: 'Create a short link',
-        requestBody: {
-          required: true,
-          content: {
-            'application/json': {
-              schema: {
-                type: 'object',
-                required: ['target_url'],
-                additionalProperties: false,
-                properties: {
-                  target_url: { type: 'string', format: 'uri', description: 'An http(s) URL' },
-                  expires_at: { type: 'string', format: 'date-time' },
-                },
-              },
-            },
-          },
-        },
-        responses: {
-          201: { description: 'Created' },
-          400: { description: 'Invalid input with field-specific guidance' },
-        },
-      },
-    },
-    '/links/{code}': {
-      parameters: [{ $ref: '#/components/parameters/Code' }],
-      get: {
-        summary: 'Get link metadata',
-        responses: {
-          200: { description: 'Link metadata' },
-          404: { description: 'Link not found' },
-        },
-      },
-      delete: {
-        summary: 'Delete a link and its clicks',
-        responses: {
-          204: { description: 'Deleted' },
-          404: { description: 'Link not found' },
-        },
-      },
-    },
-    '/links/{code}/clicks': {
-      get: {
-        summary: 'Get a keyset-paginated click log',
-        parameters: [
-          { $ref: '#/components/parameters/Code' },
-          { name: 'after', in: 'query', schema: { type: 'string' } },
-          { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100, default: 50 } },
-        ],
-        responses: {
-          200: { description: 'Click page and next_cursor' },
-          400: { description: 'Invalid query or cursor' },
-          404: { description: 'Link not found' },
-        },
-      },
-    },
-    '/links/{code}/clicks.csv': {
-      get: {
-        summary: 'Stream the click log as CSV',
-        parameters: [{ $ref: '#/components/parameters/Code' }],
-        responses: {
-          200: { description: 'CSV click log' },
-          404: { description: 'Link not found' },
-        },
-      },
-    },
-    '/{code}': {
-      get: {
-        summary: 'Redirect and record a click',
-        parameters: [{ $ref: '#/components/parameters/Code' }],
-        responses: {
-          302: { description: 'Redirected' },
-          404: { description: 'Link not found' },
-          410: { description: 'Link expired' },
-        },
-      },
-    },
-  },
-  components: {
-    parameters: {
-      Code: {
-        name: 'code',
-        in: 'path',
-        required: true,
-        schema: { type: 'string', pattern: '^[A-Za-z0-9_-]{3,16}$' },
-      },
-    },
-  },
-};
+const csvPageSize = 500;
 
 function validationMessage(issue, field) {
   if (issue.code === 'unrecognized_keys') {
@@ -190,6 +83,31 @@ function csvRow(click) {
   ].map(csvCell).join(',') + '\r\n';
 }
 
+// Preserve PostgreSQL's microseconds so a page cursor never repeats a click.
+function getClickBatch(pool, linkId, cursor, limit) {
+  if (cursor) {
+    return pool.query(
+      `SELECT id, clicked_at, referrer, user_agent,
+              to_char(clicked_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_at
+       FROM clicks
+       WHERE link_id = $1 AND (clicked_at, id) > ($2::timestamptz, $3::integer)
+       ORDER BY clicked_at, id
+       LIMIT $4`,
+      [linkId, cursor.at, cursor.id, limit],
+    );
+  }
+
+  return pool.query(
+    `SELECT id, clicked_at, referrer, user_agent,
+            to_char(clicked_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_at
+     FROM clicks
+     WHERE link_id = $1
+     ORDER BY clicked_at, id
+     LIMIT $2`,
+    [linkId, limit],
+  );
+}
+
 async function recordClick(pool, link, req) {
   const client = await pool.connect();
   try {
@@ -230,30 +148,12 @@ function streamClicks(pool, linkId) {
     yield 'id,clicked_at,referrer,user_agent\r\n';
     let cursor;
     while (true) {
-      const result = cursor
-        ? await pool.query(
-          `SELECT id, clicked_at, referrer, user_agent,
-                  to_char(clicked_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_at
-           FROM clicks
-           WHERE link_id = $1 AND (clicked_at, id) > ($2::timestamptz, $3::integer)
-           ORDER BY clicked_at, id
-           LIMIT 500`,
-          [linkId, cursor.at, cursor.id],
-        )
-        : await pool.query(
-          `SELECT id, clicked_at, referrer, user_agent,
-                  to_char(clicked_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_at
-           FROM clicks
-           WHERE link_id = $1
-           ORDER BY clicked_at, id
-           LIMIT 500`,
-          [linkId],
-        );
+      const result = await getClickBatch(pool, linkId, cursor, csvPageSize);
       for (const click of result.rows) {
         yield csvRow(click);
         cursor = { at: click.cursor_at, id: click.id };
       }
-      if (result.rowCount < 500) return;
+      if (result.rowCount < csvPageSize) return;
     }
   }
   return Readable.from(rows());
@@ -337,25 +237,7 @@ export function createApp(pool, { publicBaseUrl = '' } = {}) {
       const link = await pool.query('SELECT id FROM links WHERE code = $1', [parsedCode.data]);
       if (link.rowCount === 0) return res.status(404).json({ error: 'Link not found' });
       const limit = parsedQuery.data.limit;
-      const result = cursor
-        ? await pool.query(
-          `SELECT id, clicked_at, referrer, user_agent,
-                  to_char(clicked_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_at
-           FROM clicks
-           WHERE link_id = $1 AND (clicked_at, id) > ($2::timestamptz, $3::integer)
-           ORDER BY clicked_at, id
-           LIMIT $4`,
-          [link.rows[0].id, cursor.at, cursor.id, limit + 1],
-        )
-        : await pool.query(
-          `SELECT id, clicked_at, referrer, user_agent,
-                  to_char(clicked_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_at
-           FROM clicks
-           WHERE link_id = $1
-           ORDER BY clicked_at, id
-           LIMIT $2`,
-          [link.rows[0].id, limit + 1],
-        );
+      const result = await getClickBatch(pool, link.rows[0].id, cursor, limit + 1);
       const hasMore = result.rows.length > limit;
       const items = result.rows.slice(0, limit);
       res.json({
@@ -426,6 +308,9 @@ export function createApp(pool, { publicBaseUrl = '' } = {}) {
   app.use((error, _req, res, _next) => {
     if (error instanceof SyntaxError && 'body' in error) {
       return res.status(400).json({ error: 'Please send valid JSON.' });
+    }
+    if (error.type === 'entity.too.large') {
+      return res.status(413).json({ error: 'Request body must be 16 KB or smaller.' });
     }
     console.error('Request failed', error);
     if (res.headersSent) return res.destroy(error);
