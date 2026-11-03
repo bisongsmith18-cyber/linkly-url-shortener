@@ -32,6 +32,29 @@ npm run lint
 
 Never point `TEST_DATABASE_URL` at a production database.
 
+## Deploy to Vercel
+
+The root `index.js` exports the Express app for Vercel. The existing `npm start`
+command remains the local long-running server.
+
+1. Push the project to GitHub and import the repository in Vercel. Select the
+   branch you want to deploy. Vercel should detect the Express app automatically.
+2. Create a PostgreSQL database that is reachable from Vercel (for example, with
+   a managed PostgreSQL provider) and set `DATABASE_URL` in the Vercel project's
+   environment variables to its connection URL.
+3. Before opening the deployed app, run the contents of `db/schema.sql` once
+   against that database using your provider's SQL editor or `psql`. Optionally
+   run `db/seed.sql` to add the sample `welcome` link. Do not run these against
+   your local or test database by mistake.
+4. Optionally set `PUBLIC_BASE_URL` to the public URL you want included in
+   created links. If it is unset, the app uses Vercel's deployment URL when
+   available.
+5. Deploy, then check `/health` on the deployed URL. It should return
+   `{"status":"ok"}` when the database is reachable and the schema is installed.
+
+Do not set `TEST_DATABASE_URL` on the production deployment. Keep it pointed at
+a separate disposable database for local tests.
+
 ## API
 
 | Method | Path | Behavior |

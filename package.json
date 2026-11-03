@@ -10,7 +10,7 @@
     "start": "node src/server.js",
     "test": "node --test",
     "test:integration": "node --test test/*.test.js",
-    "lint": "eslint src test eslint.config.js"
+    "lint": "eslint index.js src test eslint.config.js"
   },
   "dependencies": {
     "dotenv": "^18.0.9",
