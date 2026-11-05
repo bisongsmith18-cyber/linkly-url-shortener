@@ -11,8 +11,36 @@ test('local database connections retain default SSL settings', () => {
 });
 
 test('remote database connections use TLS with certificate verification', () => {
-  const options = getDatabasePoolOptions('postgres://user:pass@db.example/linkly');
-  assert.equal(options.ssl, true);
+  const previousMode = process.env.DATABASE_SSL_MODE;
+  delete process.env.DATABASE_SSL_MODE;
+
+  try {
+    const options = getDatabasePoolOptions('postgres://user:pass@db.example/linkly');
+    assert.equal(options.ssl, true);
+  } finally {
+    if (previousMode === undefined) {
+      delete process.env.DATABASE_SSL_MODE;
+    } else {
+      process.env.DATABASE_SSL_MODE = previousMode;
+    }
+  }
+});
+
+test('remote database connections can require TLS with a self-signed certificate', () => {
+  const previousMode = process.env.DATABASE_SSL_MODE;
+  process.env.DATABASE_SSL_MODE = 'require';
+
+  try {
+    const options = getDatabasePoolOptions('postgres://user:pass@db.example/linkly?sslmode=disable');
+    assert.deepEqual(options.ssl, { rejectUnauthorized: false });
+    assert.deepEqual(new Client(options).connectionParameters.ssl, { rejectUnauthorized: false });
+  } finally {
+    if (previousMode === undefined) {
+      delete process.env.DATABASE_SSL_MODE;
+    } else {
+      process.env.DATABASE_SSL_MODE = previousMode;
+    }
+  }
 });
 
 test('remote database connections trust the configured CA and verify certificates', () => {
