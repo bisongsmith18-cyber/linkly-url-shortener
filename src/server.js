@@ -1,22 +1,14 @@
 import 'dotenv/config';
 import { readFile } from 'node:fs/promises';
-import { isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
-import pg from 'pg';
 import { createApp } from './app.js';
+import { createDatabasePool } from './database.js';
 
-const { Pool } = pg;
 const databaseUrl = process.env.DATABASE_URL?.trim();
 if (!databaseUrl) {
   console.error('Application startup failed: DATABASE_URL is required. Configure it with a reachable PostgreSQL connection URL.');
   process.exit(1);
 }
-
-const databaseHost = new URL(databaseUrl).hostname.replace(/^\[|\]$/g, '');
-const isLoopbackDatabase =
-  databaseHost === 'localhost' ||
-  databaseHost === '::1' ||
-  (isIP(databaseHost) === 4 && databaseHost.startsWith('127.'));
 
 const portValue = (process.env.PORT ?? '3000').trim();
 const port = Number(portValue);
@@ -25,10 +17,7 @@ if (!/^\d+$/.test(portValue) || !Number.isInteger(port) || port < 0 || port > 65
   process.exit(1);
 }
 
-const pool = new Pool({
-  connectionString: databaseUrl,
-  ...(isLoopbackDatabase ? {} : { ssl: true }),
-});
+const pool = createDatabasePool(databaseUrl);
 const schemaPath = fileURLToPath(new URL('../db/schema.sql', import.meta.url));
 const seedPath = fileURLToPath(new URL('../db/seed.sql', import.meta.url));
 
