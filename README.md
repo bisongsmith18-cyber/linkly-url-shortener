@@ -14,6 +14,7 @@ cp .env.example .env
 ```
 
 Edit `.env` and set both database URLs to match your PostgreSQL username and password. Keep `TEST_DATABASE_URL` pointed at the separate `linkly_test` database: the test suite clears its tables.
+Remote database connections use TLS with certificate verification; local loopback connections retain PostgreSQL's default SSL settings.
 
 Start the app:
 

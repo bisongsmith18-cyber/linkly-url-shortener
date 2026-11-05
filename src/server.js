@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { readFile } from 'node:fs/promises';
+import { isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { createApp } from './app.js';
@@ -11,6 +12,12 @@ if (!databaseUrl) {
   process.exit(1);
 }
 
+const databaseHost = new URL(databaseUrl).hostname.replace(/^\[|\]$/g, '');
+const isLoopbackDatabase =
+  databaseHost === 'localhost' ||
+  databaseHost === '::1' ||
+  (isIP(databaseHost) === 4 && databaseHost.startsWith('127.'));
+
 const portValue = (process.env.PORT ?? '3000').trim();
 const port = Number(portValue);
 if (!/^\d+$/.test(portValue) || !Number.isInteger(port) || port < 0 || port > 65535) {
@@ -18,7 +25,10 @@ if (!/^\d+$/.test(portValue) || !Number.isInteger(port) || port < 0 || port > 65
   process.exit(1);
 }
 
-const pool = new Pool({ connectionString: databaseUrl });
+const pool = new Pool({
+  connectionString: databaseUrl,
+  ...(isLoopbackDatabase ? {} : { ssl: true }),
+});
 const schemaPath = fileURLToPath(new URL('../db/schema.sql', import.meta.url));
 const seedPath = fileURLToPath(new URL('../db/seed.sql', import.meta.url));
 
