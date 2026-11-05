@@ -164,6 +164,8 @@ export function createApp(pool, { publicBaseUrl = '' } = {}) {
   app.disable('x-powered-by');
   app.use(express.json({ limit: '16kb' }));
 
+  app.get('/', (_req, res) => res.redirect('/docs/'));
+
   app.get('/health', async (_req, res) => {
     try {
       await pool.query('SELECT 1');
