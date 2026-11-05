@@ -16,7 +16,7 @@ cp .env.example .env
 Edit `.env` and set both database URLs to match your PostgreSQL username and password. Keep `TEST_DATABASE_URL` pointed at the separate `linkly_test` database: the test suite clears its tables.
 Remote database connections use TLS with certificate verification; local loopback connections retain PostgreSQL's default SSL settings.
 If a remote database uses a private or self-signed certificate, set `DATABASE_SSL_CA` to the database provider's CA certificate in PEM format. Newlines may be represented as `\n` in a single-line environment variable. The CA is trusted without disabling certificate verification.
-If the database CA is already installed in the operating system trust store, Node versions that support `--use-system-ca` can use it with `NODE_OPTIONS=--use-system-ca npm start`.
+The start command enables Node's system CA store, so a database CA installed in the operating system trust store is used automatically.
 
 Start the app:
 
