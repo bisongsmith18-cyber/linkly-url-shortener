@@ -43,6 +43,33 @@ test('remote database connections can require TLS with a self-signed certificate
   }
 });
 
+test('Render Postgres connections require TLS and accept Render self-signed certificates by default', () => {
+  const previousMode = process.env.DATABASE_SSL_MODE;
+  const previousCa = process.env.DATABASE_SSL_CA;
+  delete process.env.DATABASE_SSL_MODE;
+  delete process.env.DATABASE_SSL_CA;
+
+  try {
+    const options = getDatabasePoolOptions(
+      'postgres://user:pass@dpg-example-a.oregon-postgres.render.com/linkly?sslmode=verify-full',
+    );
+    assert.deepEqual(options.ssl, { rejectUnauthorized: false });
+    assert.equal(new URL(options.connectionString).searchParams.has('sslmode'), false);
+    assert.deepEqual(new Client(options).connectionParameters.ssl, { rejectUnauthorized: false });
+  } finally {
+    if (previousMode === undefined) {
+      delete process.env.DATABASE_SSL_MODE;
+    } else {
+      process.env.DATABASE_SSL_MODE = previousMode;
+    }
+    if (previousCa === undefined) {
+      delete process.env.DATABASE_SSL_CA;
+    } else {
+      process.env.DATABASE_SSL_CA = previousCa;
+    }
+  }
+});
+
 test('remote database connections trust the configured CA and verify certificates', () => {
   const previousCa = process.env.DATABASE_SSL_CA;
   process.env.DATABASE_SSL_CA = '-----BEGIN CERTIFICATE-----\\ntrusted-ca\\n-----END CERTIFICATE-----';

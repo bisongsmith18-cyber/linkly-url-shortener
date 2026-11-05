@@ -9,6 +9,7 @@ export function getDatabasePoolOptions(connectionString) {
     databaseHost === 'localhost' ||
     databaseHost === '::1' ||
     (isIP(databaseHost) === 4 && databaseHost.startsWith('127.'));
+  const isRenderPostgres = databaseHost.endsWith('-postgres.render.com');
 
   if (isLoopbackDatabase) {
     return { connectionString };
@@ -20,7 +21,8 @@ export function getDatabasePoolOptions(connectionString) {
   }
 
   const ca = process.env.DATABASE_SSL_CA?.replace(/\\n/g, '\n').trim();
-  if (ca || sslMode === 'require') {
+  const allowSelfSigned = sslMode === 'require' || (!ca && isRenderPostgres);
+  if (ca || allowSelfSigned) {
     const url = new URL(connectionString);
     for (const parameter of ['ssl', 'sslmode', 'sslcert', 'sslkey', 'sslrootcert', 'uselibpqcompat']) {
       url.searchParams.delete(parameter);
@@ -32,7 +34,7 @@ export function getDatabasePoolOptions(connectionString) {
     connectionString,
     ssl: ca
       ? { ca, rejectUnauthorized: true }
-      : sslMode === 'require'
+      : allowSelfSigned
         ? { rejectUnauthorized: false }
         : true,
   };

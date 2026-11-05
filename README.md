@@ -17,7 +17,7 @@ Edit `.env` and set both database URLs to match your PostgreSQL username and pas
 Remote database connections use TLS with certificate verification; local loopback connections retain PostgreSQL's default SSL settings.
 If a remote database uses a private or self-signed certificate, set `DATABASE_SSL_CA` to the database provider's CA certificate in PEM format. Newlines may be represented as `\n` in a single-line environment variable. The CA is trusted without disabling certificate verification.
 The start command enables Node's system CA store, so a database CA installed in the operating system trust store is used automatically.
-For Render Postgres internal connections, set `DATABASE_SSL_MODE=require` in the web service environment. This requires encrypted TLS but does not verify Render's self-signed certificate; use only for the provider's private internal connection. If you have a trusted provider CA, prefer `DATABASE_SSL_CA` instead.
+Render Postgres connections automatically require encrypted TLS and accept Render's self-signed certificate. If you have a trusted provider CA, set `DATABASE_SSL_CA` to retain certificate verification.
 
 Start the app:
 
@@ -71,8 +71,7 @@ use `localhost`: that points to the web service itself, not the database.
 After saving the variable, redeploy or restart the web service. Startup creates
 the schema and seeds the sample link. Keep `TEST_DATABASE_URL` unset in the
 production service.
-For a Render Postgres internal URL, also set `DATABASE_SSL_MODE=require` in the
-web service environment to require TLS with Render's self-signed certificate.
+Render Postgres TLS is configured automatically by the app.
 
 ## API
 
