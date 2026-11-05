@@ -55,6 +55,19 @@ command remains the local long-running server.
 Do not set `TEST_DATABASE_URL` on the production deployment. Keep it pointed at
 a separate disposable database for local tests.
 
+## Deploy to Render
+
+The web service requires a reachable PostgreSQL database; Render does not run
+one automatically alongside the Node.js service. Create or choose a PostgreSQL
+database, then add an environment variable named `DATABASE_URL` to the Render
+web service. Use the database's **Internal Database URL** when both services
+are in the same Render region, or its external connection URL otherwise. Do not
+use `localhost`: that points to the web service itself, not the database.
+
+After saving the variable, redeploy or restart the web service. Startup creates
+the schema and seeds the sample link. Keep `TEST_DATABASE_URL` unset in the
+production service.
+
 ## API
 
 | Method | Path | Behavior |
