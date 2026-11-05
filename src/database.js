@@ -9,7 +9,9 @@ export function getDatabasePoolOptions(connectionString) {
     databaseHost === 'localhost' ||
     databaseHost === '::1' ||
     (isIP(databaseHost) === 4 && databaseHost.startsWith('127.'));
-  const isRenderPostgres = databaseHost.endsWith('-postgres.render.com');
+  const isRenderPostgres =
+    databaseHost.endsWith('-postgres.render.com') ||
+    (databaseHost.startsWith('dpg-') && !databaseHost.includes('.'));
 
   if (isLoopbackDatabase) {
     return { connectionString };
